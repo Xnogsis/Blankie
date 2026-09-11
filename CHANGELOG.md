@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Export your mix as an audio file** - Save what you're hearing as an `.m4a` you can play anywhere. Pick a length from 1 minute to 1 hour under File → Export Mix as Audio on Mac, or from the share menu in Edit Preset on iPhone and iPad.
+
 ## [2.0.2] - 2026-06-28
 
 ### Added

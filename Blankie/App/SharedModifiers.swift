@@ -13,6 +13,7 @@ struct SharedAppModifiers: ViewModifier {
   let appSetup: AppSetup
   var globalSettings: GlobalSettings
   @StateObject private var audioFileImporter = AudioFileImporter.shared
+  @State private var mixExporter = MixExporter.shared
 
   /// The degraded store state to show a one-time notice for this launch, or nil
   /// when the store opened healthy (or the notice was already shown/dismissed).
@@ -80,6 +81,26 @@ struct SharedAppModifiers: ViewModifier {
           }
         }
       #endif
+      // Mix exports run detached with no save panel in the way, so show an
+      // app-wide progress HUD on both platforms while one renders.
+      .overlay {
+        if mixExporter.isExporting {
+          VStack(spacing: 8) {
+            Text("Exporting Mix…")
+              .font(.callout)
+            ProgressView(value: mixExporter.progress)
+              .frame(width: 160)
+            Text(mixExporter.progress, format: .percent.precision(.fractionLength(0)))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          .padding()
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+          .allowsHitTesting(false)
+          .transition(.opacity)
+        }
+      }
+      .animation(.easeInOut(duration: 0.2), value: mixExporter.isExporting)
   }
 
   /// Title for the degraded-store notice. Built from string literals in `Text`

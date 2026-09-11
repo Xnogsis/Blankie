@@ -50,6 +50,15 @@ extension Sound {
     return pow(linear, 3)
   }
 
+  /// Linear gain this sound contributes to an offline mixdown: the cubed
+  /// slider value times the normalization (or manual) factor, boost capped
+  /// at +24 dB like the live EQ stage. Excludes the master volume.
+  func mixdownGain() -> Float {
+    let settings = getNormalizationSettings()
+    let factor = settings.normalizeAudio ? getNormalizationFactor() : settings.volumeAdjustment
+    return scaledVolume(volume) * min(factor, Float(pow(10.0, 24.0 / 20.0)))
+  }
+
   private func getNormalizationSettings() -> (normalizeAudio: Bool, volumeAdjustment: Float) {
     // Now using unified customization for all sounds
     let customization = SoundCustomizationManager.shared.getCustomization(for: fileName)
