@@ -366,8 +366,8 @@ extension EditPresetSheet {
                 Label("Export Mix as Audio", systemImage: "waveform")
               }
               .disabled(
-              (!audioManager.hasSelectedSounds && audioManager.soloModeSound == nil)
-                || mixExporter.isExporting)
+                (!audioManager.hasSelectedSounds && audioManager.soloModeSound == nil)
+                  || mixExporter.isExporting)
             } label: {
               Image(systemName: "square.and.arrow.up")
             }
