@@ -32,6 +32,7 @@ struct EditPresetSheet: View {
   @Binding var isPresented: Preset?
   let presetManager = PresetManager.shared
   let audioManager = AudioManager.shared
+  let mixExporter = MixExporter.shared
   let globalSettings = GlobalSettings.shared
   @State var presetName: String = ""
   @State var creatorName: String = ""
@@ -299,17 +300,33 @@ extension EditPresetSheet {
           // share sheet sits there silently for seconds (large custom sounds)
           // and the app looks frozen. Build it ourselves behind a spinner, then
           // hand the ready file to the system share sheet.
-          Button {
-            Task { await prepareAndPresentShare() }
+          Menu {
+            Button {
+              Task { await prepareAndPresentShare() }
+            } label: {
+              Label("Share Preset…", systemImage: "square.and.arrow.up")
+            }
+            // Exports the *current* mix (what's playing now), not the preset
+            // being edited.
+            Menu {
+              ForEach(MixExporter.Duration.allCases) { duration in
+                Button(duration.label) {
+                  Task { await shareMixAudio(duration: duration) }
+                }
+              }
+            } label: {
+              Label("Export Mix as Audio", systemImage: "waveform")
+            }
+            .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
           } label: {
-            if isExporting {
+            if isExporting || mixExporter.isExporting {
               ProgressView()
                 .scaleEffect(0.8)
             } else {
               Image(systemName: "square.and.arrow.up")
             }
           }
-          .disabled(isExporting)
+          .disabled(isExporting || mixExporter.isExporting)
           .accessibilityLabel(Text(isExporting ? "Preparing Export" : "Share Preset"))
           .sheet(isPresented: $showingShareSheet, onDismiss: cleanupExportedFile) {
             if let exportedURL {
@@ -335,6 +352,18 @@ extension EditPresetSheet {
               } label: {
                 Label("Export to File…", systemImage: "arrow.down.doc")
               }
+              // Exports the *current* mix (what's playing now), not the
+              // preset being edited.
+              Menu {
+                ForEach(MixExporter.Duration.allCases) { duration in
+                  Button(duration.label) {
+                    Task { await exportMixAudioToFile(duration: duration) }
+                  }
+                }
+              } label: {
+                Label("Export Mix as Audio", systemImage: "waveform")
+              }
+              .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
             } label: {
               Image(systemName: "square.and.arrow.up")
             }
@@ -394,7 +423,7 @@ extension EditPresetSheet {
       Logger.ui.error("Preset export failed: \(error.localizedDescription, privacy: .public)")
       // Show ExportError's user-facing message; for an unexpected system error
       // show a friendly fallback rather than leaking a raw error string.
-      if error is PresetExporter.ExportError {
+      if error is PresetExporter.ExportError || error is MixExporter.ExportError {
         exportError = error.localizedDescription
       } else {
         exportError = String(
@@ -411,6 +440,27 @@ extension EditPresetSheet {
     private func prepareAndPresentShare() async {
       await runExport {
         _ = try await buildExportArchive()
+        showingShareSheet = true
+      }
+    }
+
+    /// Renders the *current* mix (not this preset) to an .m4a in Documents
+    /// behind the spinner, then presents the share sheet for it.
+    @MainActor
+    private func shareMixAudio(duration: MixExporter.Duration) async {
+      await runExport {
+        let tracks = try mixExporter.currentTracks()
+        let fileName = MixExporter.suggestedFileName()
+        let builtURL = try await mixExporter.export(
+          tracks: tracks, duration: duration, fileName: fileName)
+
+        let documentsPath = try FileManager.default.url(
+          for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let finalURL = documentsPath.appendingPathComponent("\(fileName).m4a")
+        try? FileManager.default.removeItem(at: finalURL)
+        try FileManager.default.moveItem(at: builtURL, to: finalURL)
+
+        exportedURL = finalURL
         showingShareSheet = true
       }
     }
@@ -462,6 +512,41 @@ extension EditPresetSheet {
         try FileManager.default.copyItem(at: builtURL, to: destination)
         // The Documents working copy isn't needed once it's saved elsewhere.
         cleanupExportedFile()
+      }
+    }
+
+    /// Renders the *current* mix (not this preset) to an .m4a at a
+    /// user-chosen destination. Tracks are gathered before the save panel so
+    /// a missing sound file errors immediately.
+    @MainActor
+    private func exportMixAudioToFile(duration: MixExporter.Duration) async {
+      guard !isExporting else { return }
+
+      let tracks: [MixExporter.Track]
+      do {
+        tracks = try mixExporter.currentTracks()
+      } catch {
+        exportError =
+          (error as? MixExporter.ExportError)?.errorDescription
+          ?? String(
+            localized: "Couldn't export the mix. Please try again.",
+            comment: "Alert message shown when exporting the mix as audio fails for an unexpected reason.")
+        return
+      }
+
+      let fileName = MixExporter.suggestedFileName()
+      let panel = NSSavePanel()
+      panel.allowedContentTypes = [.mpeg4Audio]
+      panel.nameFieldStringValue = "\(fileName).m4a"
+      panel.canCreateDirectories = true
+      guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+      await runExport {
+        let builtURL = try await mixExporter.export(
+          tracks: tracks, duration: duration, fileName: fileName)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.copyItem(at: builtURL, to: destination)
+        try? FileManager.default.removeItem(at: builtURL)
       }
     }
   #endif

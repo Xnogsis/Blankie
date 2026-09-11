@@ -19,6 +19,7 @@ import SwiftUI
     @State private var audioManager = AudioManager.shared
     @State private var presetManager = PresetManager.shared
     @State private var globalSettings = GlobalSettings.shared
+    @State private var mixExporter = MixExporter.shared
     @Environment(\.openWindow) private var openWindow
 
     /// Master-volume nudge per keystroke. 1/16 matches the macOS hardware
@@ -115,6 +116,17 @@ import SwiftUI
         // ⌘E never exports the hidden preset while you're hearing one sound.
         .disabled(presetManager.currentPreset == nil || audioManager.soloModeSound != nil)
 
+        // Renders the currently playing mix (solo sound, or every selected
+        // sound) to an .m4a the user can keep or share.
+        Menu("Export Mix as Audio") {
+          ForEach(MixExporter.Duration.allCases) { duration in
+            Button(duration.label) {
+              Task { await exportMixAudio(duration: duration) }
+            }
+          }
+        }
+        .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
+
         Button("Manage Sounds") {
           appState.showingManageSounds = true
         }
@@ -177,6 +189,50 @@ import SwiftUI
             comment: "Alert message shown when exporting a preset fails for an unexpected reason.")
         alert.runModal()
       }
+    }
+
+    /// Renders the current mix to an .m4a at a user-chosen destination.
+    /// Tracks are gathered before the save panel so a missing sound file
+    /// errors immediately rather than after the user picks a destination.
+    @MainActor
+    private func exportMixAudio(duration: MixExporter.Duration) async {
+      let tracks: [MixExporter.Track]
+      do {
+        tracks = try mixExporter.currentTracks()
+      } catch {
+        Logger.ui.error("Mix export failed: \(error.localizedDescription, privacy: .public)")
+        showMixExportError(error)
+        return
+      }
+
+      let fileName = MixExporter.suggestedFileName()
+      let panel = NSSavePanel()
+      panel.allowedContentTypes = [.mpeg4Audio]
+      panel.nameFieldStringValue = "\(fileName).m4a"
+      panel.canCreateDirectories = true
+      guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+      do {
+        let builtURL = try await mixExporter.export(
+          tracks: tracks, duration: duration, fileName: fileName)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.copyItem(at: builtURL, to: destination)
+        try? FileManager.default.removeItem(at: builtURL)
+      } catch {
+        Logger.ui.error("Mix export failed: \(error.localizedDescription, privacy: .public)")
+        showMixExportError(error)
+      }
+    }
+
+    private func showMixExportError(_ error: Error) {
+      let alert = NSAlert()
+      alert.messageText = String(localized: "Export Failed")
+      alert.informativeText =
+        (error as? MixExporter.ExportError)?.errorDescription
+        ?? String(
+          localized: "Couldn't export the mix. Please try again.",
+          comment: "Alert message shown when exporting the mix as audio fails for an unexpected reason.")
+      alert.runModal()
     }
   }
 #endif
