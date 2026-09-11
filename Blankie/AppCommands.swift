@@ -125,7 +125,9 @@ import SwiftUI
             }
           }
         }
-        .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
+        .disabled(
+          (!audioManager.hasSelectedSounds && audioManager.soloModeSound == nil)
+            || mixExporter.isExporting)
 
         Button("Manage Sounds") {
           appState.showingManageSounds = true

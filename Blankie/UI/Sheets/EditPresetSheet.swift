@@ -317,7 +317,9 @@ extension EditPresetSheet {
             } label: {
               Label("Export Mix as Audio", systemImage: "waveform")
             }
-            .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
+            .disabled(
+              (!audioManager.hasSelectedSounds && audioManager.soloModeSound == nil)
+                || mixExporter.isExporting)
           } label: {
             if isExporting || mixExporter.isExporting {
               ProgressView()
@@ -363,7 +365,9 @@ extension EditPresetSheet {
               } label: {
                 Label("Export Mix as Audio", systemImage: "waveform")
               }
-              .disabled(!audioManager.hasSelectedSounds || mixExporter.isExporting)
+              .disabled(
+              (!audioManager.hasSelectedSounds && audioManager.soloModeSound == nil)
+                || mixExporter.isExporting)
             } label: {
               Image(systemName: "square.and.arrow.up")
             }

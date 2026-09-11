@@ -180,7 +180,9 @@ final class MixExporter {
       AVNumberOfChannelsKey: 2,
       AVEncoderBitRateKey: 192_000,
     ]
-    let outFile = try AVAudioFile(forWriting: renderURL, settings: settings)
+    // Optional so it can be released (which finalizes the AAC container)
+    // before the finished render is moved into place.
+    var outFile: AVAudioFile? = try AVAudioFile(forWriting: renderURL, settings: settings)
 
     let readers = try tracks.map { try TrackReader(track: $0, outputFormat: outputFormat) }
 
@@ -283,7 +285,7 @@ final class MixExporter {
         }
       }
 
-      try outFile.write(from: mix)
+      try outFile?.write(from: mix)
 
       framesDone += frames
       framesSinceReport += frames
@@ -296,6 +298,7 @@ final class MixExporter {
 
     // A cancelled/failed render never leaves a half-written file at the
     // caller-facing URL; move the finished render into place atomically.
+    outFile = nil
     try? FileManager.default.removeItem(at: finalURL)
     try FileManager.default.moveItem(at: renderURL, to: finalURL)
     return finalURL

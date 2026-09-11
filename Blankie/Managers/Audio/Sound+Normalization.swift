@@ -56,7 +56,7 @@ extension Sound {
   func mixdownGain() -> Float {
     let settings = getNormalizationSettings()
     let factor = settings.normalizeAudio ? getNormalizationFactor() : settings.volumeAdjustment
-    return scaledVolume(volume) * min(factor, pow(10, 24 / 20))
+    return scaledVolume(volume) * min(factor, Float(pow(10.0, 24.0 / 20.0)))
   }
 
   private func getNormalizationSettings() -> (normalizeAudio: Bool, volumeAdjustment: Float) {
